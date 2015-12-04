@@ -48,28 +48,28 @@ Function New-OGUser
 
 <#
   .Synopsis
-    Creates new users in OpsGenie
+    Creates a new user in OpsGenie
   .Description
-    The New-OGUser cmdlet is used to create new users.
+    The New-OGUser cmdlet is used to create a new user in OpsGenie.
   .Example
-    New-OGUser -apiKey api-key -fromuser 'bob@example.net'
-      This copies the notification preferences for "New Alert" (the default) from Bob to all users (the default).
-  .Example
-    New-OGUser -apiKey api-key -fromuser 'bob@example.net' -tousers 'alice@example.net','charlie@example.net'
-      This copies the notification preferences for "New Alert" (the default) from Bob to Alice and Charlie.
-  .Example
-    New-OGUser -apiKey api-key -fromuser 'bob@example.net' -tousers 'example_group' -ruletypes 'all'
-      This copies the notification preferences for all alert rules from Bob to all members of the example_group.
+    New-OGUser -apiKey api-key -username "bob@example.com" -fullname "Bob Ross"
+      This creates a new user "bob@example.com" with the name "Bob Ross", with a role of User (the default)
   .Parameter apiKey
     The api key with permissions to modify users.
-  .Parameter fromUser
-    The user to copy notification rules from.
-  .Parameter toUsers
-    The users or groups to apply the new notification preferences to.
-    Default users is 'all'
-  .Parameter ruleTypes
-    The rule types to copy from the fromUser to the toUsers.
-    Default rule type is 'New Alert'
+  .Parameter userName
+    The username for the new user.  Must be in user@domain.tld format.
+  .Parameter fullName
+    The user's full name.
+  .Parameter Role
+    The role of the new user, can be any of the built in roles or any custom role.
+    Default role type is 'User'
+  .Parameter TimeZone
+    The timezone of the new user, in the format listed here: https://www.opsgenie.com/docs/miscellaneous/supported-timezone-ids
+    Default timezone is set to the main account time zone.
+  .Parameter Locale
+    The locale of the new user, in the format listed here: https://www.opsgenie.com/docs/miscellaneous/supported-locales
+    Default locale is set to the main account locale.
+
   .Notes
     NAME:  New-OGUser
     AUTHOR: Patrick Forristal
@@ -83,7 +83,9 @@ Function New-OGUser
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
         [Parameter(Mandatory)][ValidateScript({Validate-Email ($_)})][string] $UserName,
         [Parameter(Mandatory)][ValidateLength(2,512)][string] $FullName,
-        [ValidateLength(1,512)][string] $Role = "User"
+        [ValidateLength(1,512)][string] $Role = "User",
+        [ValidateLength(2,512)][string] $TimeZone,
+        [ValidateLength(2,512)][string] $Locale
         )
 
     $Properties = @{'apiKey'=$apiKey;'username'=$UserName;'fullname'=$fullname;'role'=$role}
