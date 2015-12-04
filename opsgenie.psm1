@@ -1,6 +1,8 @@
 <#Validation functions
 
 TODO: Timezone and Locale validation.  Medium effort, low reward.
+
+
 #>
 Function Validate-GUID
 {
@@ -18,13 +20,13 @@ Function Validate-GUID
 
 }
 
-function Validate-Email ([string]$Email) 
-{ 
+function Validate-Email ([string]$Email)
+{
   if ($Email.Length -gt 100) {
     Write-Error "Max length (100) exceeded."
     return $false
   }
-  $valid = $Email -match "^(?("")("".+?""@)|(([0-9a-zA-Z]((\.(?!\.))|[-!#\$%&'\*\+/=\?\^`\{\}\|~\w])*)(?<=[0-9a-zA-Z])@))(?(\[)(\[(\d{1,3}\.){3}\d{1,3}\])|(([0-9a-zA-Z][-\w]*[0-9a-zA-Z]\.)+[a-zA-Z]{2,6}))$" 
+  $valid = $Email -match "^(?("")("".+?""@)|(([0-9a-zA-Z]((\.(?!\.))|[-!#\$%&'\*\+/=\?\^`\{\}\|~\w])*)(?<=[0-9a-zA-Z])@))(?(\[)(\[(\d{1,3}\.){3}\d{1,3}\])|(([0-9a-zA-Z][-\w]*[0-9a-zA-Z]\.)+[a-zA-Z]{2,6}))$"
   if ($valid) {
     Write-Debug "$Email is a valid email address"
     return $true
@@ -32,7 +34,7 @@ function Validate-Email ([string]$Email)
     Write-Error "$Email is not a valid email address"
     return $false
   }
-}  
+}
 
 <#
     User Functions:
@@ -101,6 +103,35 @@ Function New-OGUser
 
 Function Get-OGUser
 {
+
+<#
+  .Synopsis
+    Gets a specific user or users in OpsGenie
+  .Description
+    The Get-OGUser cmdlet is used to get a specific user or users in OpsGenie.
+  .Example
+    Get-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -username "bob@example.com"
+      This pulls the record for the user Bob.
+  .Example
+    Get-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -username "bob@example.com","alices@example.com"
+      This pulls the records for the users Bob and Alice.
+  .Example
+    Get-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -id "00000000-0000-0000-0000-000000000000"
+      This pulls the record for the user who's id is 00000000-0000-0000-0000-000000000000
+  .Parameter apiKey
+    The api key with permissions to modify users.
+  .Parameter userName
+    The username(s) of the user(s) to be searched.  Must be in user@domain.tld format.
+  .Parameter id
+    The id(s) for the user(s) to be searched.  Must be a valid GUID.
+  .Notes
+    NAME:  Get-OGUser
+    AUTHOR: Patrick Forristal
+    LASTEDIT: 12/4/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+
     Param(
         [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
@@ -118,7 +149,7 @@ Function Get-OGUser
             Write-Verbose "Sending request to OpsGenie to get the user, $id"
             $output += Invoke-RestMethod -Method Get -Uri $apiURI2
         }
-        return $output     
+        return $output
     } else {
         $output = @()
         foreach ($user in $UserName){
@@ -133,6 +164,39 @@ Function Get-OGUser
 
 Function Set-OGUser
 {
+<#
+  .Synopsis
+    Updates a user or users in OpsGenie
+  .Description
+    The Set-OGUser cmdlet is used to change a user or users in OpsGenie.
+  .Example
+    Set-OGUser -apiKey api-key -username "bob@example.com" -fullname "Bob Ross"
+      This changes the name of user "bob@example.com" to "Bob Ross"
+  .Example
+    Set-OGUser -apiKey api-key -username "bob@example.com" -fullname "Bob Ross"
+      This changes the name of user "bob@example.com" to "Bob Ross"
+  .Parameter apiKey
+    The api key with permissions to modify users.
+  .Parameter userName
+    The username of the user(s) to modify with this cmdlet.
+  .Parameter id
+    The id of the user(s) to modify with this cmdlet.
+  .Parameter fullName
+    The full name to set for the user(s).
+  .Parameter Role
+    The role to set for the user(s), can be any of the built in roles or any custom role.
+  .Parameter TimeZone
+    The timezone to set for the user(s), in the format listed here: https://www.opsgenie.com/docs/miscellaneous/supported-timezone-ids
+  .Parameter Locale
+    The locale to set for the user(s), in the format listed here: https://www.opsgenie.com/docs/miscellaneous/supported-locales
+
+  .Notes
+    NAME:  Set-OGUser
+    AUTHOR: Patrick Forristal
+    LASTEDIT: 12/4/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
     Param(
         [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
@@ -159,20 +223,20 @@ Function Set-OGUser
 
     foreach ($userid in $id) {
             $Properties = @{'apiKey'=$apiKey;'id'=$userid}
-            
+
             if ($FullName.Length -gt 0) {$Properties += @{'fullname'=$fullname}}
             if ($timezone.Length -gt 0) {$Properties += @{'timezone'=$timezone}}
             if ($locale.Length -gt 0) {$Properties += @{'locale'=$locale}}
             if ($role.Length -gt 0) {$Properties += @{'role'=$role}}
-    
+
             $RequestParams = New-Object -TypeName psobject -Property $Properties
             $JSONbody = ConvertTo-Json -InputObject $RequestParams
 
             Write-Verbose "Sending request to OpsGenie to modify user, $UserName"
             $output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
-     
+
     }
-    
+
 }
 
 
@@ -184,13 +248,13 @@ Function Copy-OGNotificationRules
   .Description
     The Copy-OGNotificationRules cmdlet is useful for templating users from a golden user.
   .Example
-    Copy-OGNotificationRules -apiKey api-key -fromuser 'bob@example.net'
+    Copy-OGNotificationRules -apiKey aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa -fromuser 'bob@example.net'
       This copies the notification preferences for "New Alert" (the default) from Bob to all users (the default).
   .Example
-    Copy-OGNotificationRules -apiKey api-key -fromuser 'bob@example.net' -tousers 'alice@example.net','charlie@example.net'
+    Copy-OGNotificationRules -apiKey aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa -fromuser 'bob@example.net' -tousers 'alice@example.net','charlie@example.net'
       This copies the notification preferences for "New Alert" (the default) from Bob to Alice and Charlie.
   .Example
-    Copy-OGNotificationRules -apiKey api-key -fromuser 'bob@example.net' -tousers 'example_group' -ruletypes 'all'
+    Copy-OGNotificationRules -apiKey aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa -fromuser 'bob@example.net' -tousers 'example_group' -ruletypes 'all'
       This copies the notification preferences for all alert rules from Bob to all members of the example_group.
   .Parameter apiKey
     The api key with permissions to modify users.
@@ -219,9 +283,9 @@ Function Copy-OGNotificationRules
     )
 
     $Properties = @{'apiKey'=$apiKey;'fromUser'=$fromUser;'toUsers'=$toUsers;'ruleTypes'=$ruleTypes}
-    
+
     $RequestParams = New-Object -TypeName psobject -Property $Properties
-    
+
     $JSONbody = ConvertTo-Json -InputObject $RequestParams
 
     Write-Verbose "Sending request to OpsGenie to copy notification rules from $fromUser to $toUsers"
