@@ -4,7 +4,7 @@ TODO: Timezone and Locale validation.  Medium effort, low reward.
 
 
 #>
-Function Validate-GUID
+Function Test-Guid
 {
     Param(
         [Parameter(Mandatory)][string[]] $GUID
@@ -20,7 +20,7 @@ Function Validate-GUID
 
 }
 
-function Validate-Email ([string]$Email)
+function Test-Email ([string]$Email)
 {
   if ($Email.Length -gt 100) {
     Write-Error "Max length (100) exceeded."
@@ -38,23 +38,23 @@ function Validate-Email ([string]$Email)
 
 <#
     User Functions:
-    New-OGUser    - Create User
+    Add-OGUser    - Create User
     Set-OGUser    - Update User
     Remove-OGUser - Remove User
     Get-OGUser    - Get User(s)
     Copy-OGNotificationRules - Copy Notification Rules from one user to other users/groups
 #>
 
-Function New-OGUser
+Function Add-OGUser
 {
 
 <#
   .Synopsis
     Creates a new user in OpsGenie
   .Description
-    The New-OGUser cmdlet is used to create a new user in OpsGenie.
+    The Add-OGUser cmdlet is used to create a new user in OpsGenie.
   .Example
-    New-OGUser -apiKey api-key -username "bob@example.com" -fullname "Bob Ross"
+    Add-OGUser -apiKey api-key -username "bob@example.com" -fullname "Bob Ross"
       This creates a new user "bob@example.com" with the name "Bob Ross", with a role of User (the default)
   .Parameter apiKey
     The api key with permissions to modify users.
@@ -73,7 +73,7 @@ Function New-OGUser
     Default locale is set to the main account locale.
 
   .Notes
-    NAME:  New-OGUser
+    NAME:  Add-OGUser
     AUTHOR: Patrick Forristal
     LASTEDIT: 12/4/2015
     KEYWORDS: OpsGenie
@@ -81,9 +81,9 @@ Function New-OGUser
  #>
 
     Param(
-        [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
-        [Parameter(Mandatory)][ValidateScript({Validate-Email ($_)})][string] $UserName,
+        [Parameter(Mandatory)][ValidateScript({Test-Email ($_)})][string] $UserName,
         [Parameter(Mandatory)][ValidateLength(2,512)][string] $FullName,
         [ValidateLength(1,512)][string] $Role = "User",
         [ValidateLength(2,512)][string] $TimeZone,
@@ -133,23 +133,28 @@ Function Get-OGUser
  #>
 
     Param(
-        [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
-        [ValidateScript({Validate-Email ($_)})][string[]] $UserName,
-        [ValidateScript({Validate-GUID ($_)})][string[]] $id
+        [ValidateScript({Test-Email ($_)})][string[]] $UserName,
+        [ValidateScript({Test-Guid ($_)})][string[]] $id
         )
 
-    if (($id.Length -gt 0 -and $UserName.Length -gt 0) -or ($UserName.Length -eq 0 -and $id.Length -eq 0)) {
+    if (($id.Length -gt 0 -and $UserName.Length -gt 0)) {
         Write-Error "You must specify either username(s) or id(s)."
+        return 1
     }
-    if ($id.Length -gt 0) {
+
+    if ($UserName.Length -eq 0 -and $id.Length -eq 0) {
+          $apiURI2 = $apiURI + "?apiKey=$apiKey"
+          Write-Verbose "Sending request to OpsGenie to get all users"
+          $output = (Invoke-RestMethod -Method Get -Uri $apiURI2).users
+    } elseif ($id.Length -gt 0) {
          $output = @()
         foreach ($user in $id){
             $apiURI2 = $apiURI + "?apiKey=$apiKey&id=$id"
             Write-Verbose "Sending request to OpsGenie to get the user, $id"
             $output += Invoke-RestMethod -Method Get -Uri $apiURI2
         }
-        return $output
     } else {
         $output = @()
         foreach ($user in $UserName){
@@ -157,8 +162,9 @@ Function Get-OGUser
             Write-Verbose "Sending request to OpsGenie to get the user, $UserName"
             $output += Invoke-RestMethod -Method Get -Uri $apiURI2
         }
-        return $output
+        
     }
+    return $output
 }
 
 
@@ -198,10 +204,10 @@ Function Set-OGUser
  #Requires -Version 3.0
  #>
     Param(
-        [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
-        [ValidateScript({Validate-Email ($_)})][string[]] $UserName,
-        [ValidateScript({Validate-GUID ($_)})][string[]] $id,
+        [ValidateScript({Test-Email ($_)})][string[]] $UserName,
+        [ValidateScript({Test-Guid ($_)})][string[]] $id,
         [ValidateLength(2,512)][string] $FullName,
         [ValidateLength(2,512)][string] $TimeZone,
         [ValidateLength(2,512)][string] $Locale,
@@ -240,6 +246,93 @@ Function Set-OGUser
 }
 
 
+Function Remove-OGUser
+{
+
+<#
+  .Synopsis
+    Removes a specific user or users in OpsGenie
+  .Description
+    The Remove-OGUser cmdlet is used to remove a specific user or users in OpsGenie.
+  .Example
+    Remove-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -username "bob@example.com"
+      This removes account for the user Bob.
+  .Example
+    Remove-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -username "bob@example.com","alices@example.com"
+      This removes the account for users Bob and Alice.
+  .Example
+    Remove-OGUser -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -id "00000000-0000-0000-0000-000000000000"
+      This removes the account for the user who's id is 00000000-0000-0000-0000-000000000000
+  .Parameter apiKey
+    The api key with permissions to modify users.
+  .Parameter userName
+    The username(s) of the user(s) to be removed.  Must be in user@domain.tld format.
+  .Parameter id
+    The id(s) for the user(s) to be removed.  Must be a valid GUID.
+  .Notes
+    NAME:  Get-OGUser
+    AUTHOR: Patrick Forristal
+    LASTEDIT: 12/4/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+
+    Param(
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
+        [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
+        [ValidateScript({Test-Email ($_)})][string[]] $UserName,
+        [ValidateScript({Test-Guid ($_)})][string[]] $id,
+        [switch] $Force
+        )
+
+    if (($id.Length -gt 0 -and $UserName.Length -gt 0) -or ($UserName.Length -eq 0 -and $id.Length -eq 0)) {
+        Write-Error "You must specify either username(s) or id(s)."
+    }
+
+    if (!$Force) {
+      $PromptTitle = "Remove user(s)"
+      $PromptMessage = "Do you really want to delete the specified user(s)?"
+      $PromptYes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Deletes the specified user(s)."
+      $PromptNo = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Cancels the delete operation."
+      $PromptOptions = [System.Management.Automation.Host.ChoiceDescription[]]($yes,$no)
+      $PromptResponse = $host.ui.PromptForChoice($PromptTitle,$PromptMessage,$PromptOptions,1)
+      if ($PromptResponse -ne 0) {
+        Write-Verbose "Remove-OGUser cancelled by user."
+        return
+      }
+    }
+
+    if ($UserName.Count -gt 0) {
+        foreach ($user in $UserName) {
+            $NewID = (get-OGUser -apiKey $apiKey -UserName $User).id
+            if ($NewID.length -gt 0 ) {
+                $id += $NewID
+            } else {
+                Write-Error "$User is not a valid user."    
+            }
+        }
+    }
+
+    foreach ($UserId in $ID) {
+            $user = get-OGUser -apiKey $apiKey -id $UserId
+            if ($user.id.length -gt 0){
+
+                $Properties = @{'apiKey'=$apiKey;'id'=$UserId}
+
+                $RequestParams = New-Object -TypeName psobject -Property $Properties
+                $JSONbody = ConvertTo-Json -InputObject $RequestParams
+
+                Write-Verbose "Sending request to OpsGenie to delete user, $($User.username)"
+                $output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+            } else {
+             Write-Error "$id is not a valid user id."
+            }
+    }
+        return $output
+    
+}
+
+
 Function Copy-OGNotificationRules
 {
 <#
@@ -274,9 +367,9 @@ Function Copy-OGNotificationRules
  #Requires -Version 3.0
  #>
     Param(
-        [Parameter(Mandatory)][ValidateScript({Validate-GUID ($_)})][string] $apiKey,
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/copyNotificationRules',
-        [Parameter(Mandatory)][ValidateScript({Validate-Email ($_)})][string] $fromUser,
+        [Parameter(Mandatory)][ValidateScript({Test-Email ($_)})][string] $fromUser,
         [string[]] $toUsers = @("all"),
         [string[]] $ruleTypes = @("New Alert")
 
