@@ -43,6 +43,10 @@ function Test-Email ([string]$Email)
     Remove-OGUser - Remove User
     Get-OGUser    - Get User(s)
     Copy-OGNotificationRules - Copy Notification Rules from one user to other users/groups
+		Get-OGTEam
+		Set-OGTeam
+		Remove-OGTeam
+		Add-OGTeam
 #>
 
 Function Add-OGUser
@@ -248,6 +252,7 @@ Function Set-OGUser
 
 Function Remove-OGUser
 {
+[CmdletBinding()]
 
 <#
   .Synopsis
@@ -294,7 +299,7 @@ Function Remove-OGUser
       $PromptMessage = "Do you really want to delete the specified user(s)?"
       $PromptYes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Deletes the specified user(s)."
       $PromptNo = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Cancels the delete operation."
-      $PromptOptions = [System.Management.Automation.Host.ChoiceDescription[]]($yes,$no)
+      $PromptOptions = [System.Management.Automation.Host.ChoiceDescription[]]($PromptYes,$PromptNo)
       $PromptResponse = $host.ui.PromptForChoice($PromptTitle,$PromptMessage,$PromptOptions,1)
       if ($PromptResponse -ne 0) {
         Write-Verbose "Remove-OGUser cancelled by user."
@@ -321,6 +326,7 @@ Function Remove-OGUser
 
                 $RequestParams = New-Object -TypeName psobject -Property $Properties
                 $JSONbody = ConvertTo-Json -InputObject $RequestParams
+								Write-Debug $JSONbody
 
                 Write-Verbose "Sending request to OpsGenie to delete user, $($User.username)"
                 $output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
@@ -384,3 +390,278 @@ Function Copy-OGNotificationRules
     Write-Verbose "Sending request to OpsGenie to copy notification rules from $fromUser to $toUsers"
     Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
 }
+
+
+Function Get-OGTeam
+{
+[CmdletBinding()]
+
+<#
+  .Synopsis
+    Gets a specific team or teams in OpsGenie
+  .Description
+    The Get-OGTeam cmdlet is used to get a list of teams or a specific Team in OpsGenie.
+  .Example
+    Get-OGTeam -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -TeamName "SkilledPainters"
+      This pulls the Team for the TeamName SkilledPainters.
+  .Example
+    Get-OGTeam -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" 
+      This pulls the list of all teams
+   .Parameter apiKey
+    The api key with permissions to get teams.
+  .Parameter TeamName
+    The name of the Team to be searched.  
+  .Parameter id
+    The id(s) for the Teams(s) to be searched.  Must be a valid GUID.
+  .Notes
+    NAME:  Get-OGTeam
+    AUTHOR: Josh Falls
+    LASTEDIT: 12/22/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+
+    Param(
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
+        [string] $apiURI = 'https://api.opsgenie.com/v1/json/team',
+        [string[]] $TeamName,
+        [ValidateScript({Test-Guid ($_)})][string[]] $id
+        )
+
+    
+    if ($TeamName.Length -eq 0 -and $id.Length -eq 0) {
+          $apiURI2 = $apiURI + "?apiKey=$apiKey"
+          Write-Verbose "Sending request to OpsGenie to get all teams"
+          $output = (Invoke-RestMethod -Method Get -Uri $apiURI2).teams
+    } elseif ($id.Length -gt 0) {
+         $output = @()
+        foreach ($TeamName in $id){
+            $apiURI2 = $apiURI + "?apiKey=$apiKey&id=$id"
+            Write-Verbose "Sending request to OpsGenie to get the Team, $id"
+            $output += Invoke-RestMethod -Method Get -Uri $apiURI2
+        }
+    } else {
+        $output = @()
+        foreach ($Team in $TeamName){
+            $apiURI2 = $apiURI + "?apiKey=$apiKey&name=$Team"
+            Write-Verbose "Sending request to OpsGenie to get the user, $Team"
+						Write-Debug $apiURI2
+            $output += Try {Invoke-RestMethod -Method Get -Uri $apiURI2} Catch {Write-Error -Message "Teamname $($TeamName) could not be found, check spelling and CASE"} 
+        }
+        
+    }
+    return $output
+}
+
+
+Function Set-OGTeam
+{
+[CmdletBinding()]
+<#
+  .Synopsis
+    Updates a Team in OpsGenie
+  .Description
+    The Set-OGTeam cmdlet is used to add a user to a team.
+  .Example
+    Set-OGTeam -apiKey api-key -TeamName SkilledPainters -username "bob@example.com" -TeamRole admin
+      This addes the user "bob@example.com" to Team "SkilledPainters"
+	.Example
+    Set-OGTeam -apiKey api-key -TeamName SkilledPainters -username "bob@example.com" -RemoveUser
+      This removes the user "bob@example.com" from Team "SkilledPainters"
+	.Example
+    Set-OGTeam -apiKey api-key -TeamName SkilledPainters -ChangeTeamNameTo PaintersWithLargeHair
+      This removes the user "bob@example.com" from Team "PaintersWithLargeHair"					
+  .Parameter apiKey
+    The api key with permissions to modify users.
+  .Parameter id
+    The id of the Team to modify with this cmdlet.
+  .Parameter TeamName
+    The name of the Team to modify.
+	.Parameter userName
+    The username of the user to modify with this cmdlet.
+  .Parameter TeamRole
+    The team role to set for the user, user or TeamAdmin (called "admin" via the API)
+	.Parameter ChangeTeamNameTo
+    The NEW name to set on "TeamName"
+  
+
+  .Notes
+    NAME:  Set-OGUser
+    AUTHOR: Josh Falls
+    LASTEDIT: 12/22/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+    Param(
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
+        [string] $apiURI = 'https://api.opsgenie.com/v1/json/team',
+        [string] $TeamName,
+        [ValidateScript({Test-Guid ($_)})][string] $id,
+        [ValidateLength(2,100)][string] $ChangeTeamNameTo,
+        [string]$username,
+				[ValidateSet("user","admin")][string] $TeamRole="user",
+				[switch]$RemoveUser
+        )
+#Not allowing Array on Params here becuase Mapping TeamName to ChangeTeamNameTo was odd and mapping a user to a role was odd. Also since users cannot be
+    if (($id.Length -gt 0 -and $TeamName.Length -gt 0) -or ($TeamName.Length -eq 0 -and $id.Length -eq 0)) {
+        Write-Error "You must specify either a teamname or id."
+    }
+
+    $output = @()
+    $Properties = @{'apiKey'=$apiKey}
+
+    if ($TeamName.Count -gt 0) {
+	    $id = (get-OGTeam -apiKey $apiKey -TeamName $Teamname).id 
+    }
+  
+	  $Properties = @{'apiKey'=$apiKey;'id'=$id}
+
+    if ($ChangeTeamNameTo.Length -gt 0) {$Properties += @{'name'=$ChangeTeamNameTo}}
+
+		if ($username.Length -gt 0) {
+		$UserName = $username.tolower()
+		$TeamRole = $TeamRole.tolower()
+			$CurrentTeamUsers = (Get-OGTeam -apiKey $apiKey -TeamName $TeamName).members
+			foreach ($TeamUser in $currentTeamUsers ) {
+				if ($TeamUser.user -ne $UserName) {
+					$MemberToRole += [PSCustomObject[]]@{
+						user = $Teamuser.user
+						role =$Teamuser.role
+					}
+				Write-Debug -Message "Added $($TeamUser.user) to MemberToRole"
+				}
+				
+				
+			}
+			
+			$MemberToRole += [PSCustomObject[]]@{
+				user = $username
+				role =$TeamRole
+			}
+			Write-Debug -Message "Added username param of $($username) to MemberToRole"
+			
+			if ($RemoveUser) {
+				$MemberToRole = $MemberToRole | %{
+					if ($_.user -ne $username) {$_}
+				}
+				Write-Debug -Message "Removed username param of $($username) from MemberToRole"
+			}
+			
+			$Properties += @{'members'=$MemberToRole}  
+		}
+
+    $RequestParams = New-Object -TypeName psobject -Property $Properties
+    $JSONbody = ConvertTo-Json -InputObject $RequestParams
+		Write-Debug $JSONbody
+
+    
+		$output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+
+}
+
+Function Remove-OGTeam
+{
+[CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact="High")]
+
+<#
+  .Synopsis
+    Remove a specific team from OpsGenie
+  .Description
+    The Remove-OGTeam cmdlet is used to remove teams in OpsGenie.
+  .Example
+    Remove-OGTeam -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -TeamName "SkilledPainters"
+      Removes the Team "SkilledPainters" from OpsGenie
+  .Parameter apiKey
+    The api key with permissions to get teams.
+  .Parameter TeamName
+    The name of the Team to be removed.  
+  .Parameter id
+    The id for the Teams to be removed.  Must be a valid GUID.
+  .Notes
+    NAME:  Remove-OGTeam
+    AUTHOR: Josh Falls
+    LASTEDIT: 12/22/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+
+    Param(
+        [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
+        [string] $apiURI = 'https://api.opsgenie.com/v1/json/team',
+        [string] $TeamName,
+        [ValidateScript({Test-Guid ($_)})][string] $id
+        )
+
+    
+    if ($TeamName.Length -eq 0 -and $id.Length -eq 0) {
+          $apiURI2 = $apiURI + "?apiKey=$apiKey"
+          Write-Verbose "Sending request to OpsGenie to get all teams"
+          $output = (Invoke-RestMethod -Method Get -Uri $apiURI2).teams
+    } elseif ($id.Length -gt 0) {
+        $output = @()
+        $apiURI2 = $apiURI + "?apiKey=$apiKey&id=$id"
+        Write-Verbose "Sending request to OpsGenie to get the Team, $id"
+        Write-Debug $apiURI2
+				if ($PSCmdlet.ShouldProcess("$($id) from OpsGenie ","Remove Team")) {
+					$output += Invoke-RestMethod -Method Delete -Uri $apiURI2
+				}
+      
+    } else {
+        $output = @()
+
+            $apiURI2 = $apiURI + "?apiKey=$apiKey&name=$TeamName"
+            Write-Verbose "Sending request to OpsGenie to get the user, $Team"
+						Write-Debug $apiURI2
+						if ($PSCmdlet.ShouldProcess("$($TeamName) from OpsGenie ","Remove Team")) {
+            	$output += Invoke-RestMethod -Method Delete -Uri $apiURI2 
+						}
+    }
+}
+
+
+Function Add-OGTeam
+{
+[CmdletBinding()]
+
+<#
+  .Synopsis
+    Add a new team tp OpsGenie
+  .Description
+    The Add-OGTeam cmdlet is used to Add teams in OpsGenie.
+  .Example
+    Add-OGTeam -apiKey "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" -TeamName "BobTheBuildersTeam"
+      Creates a team called "BobTheBuildersTeam" in OpsGenie
+  .Parameter apiKey
+    The api key with permissions to get teams.
+  .Parameter TeamName
+    The name of the Team to be created 
+  .Notes
+    NAME:  Add-OGTeam
+    AUTHOR: Josh Falls
+    LASTEDIT: 12/22/2015
+    KEYWORDS: OpsGenie
+ #Requires -Version 3.0
+ #>
+
+  Param(
+      [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
+      [string] $apiURI = 'https://api.opsgenie.com/v1/json/team',
+      [string] $TeamName
+  )
+
+    
+  $output = @()
+  $Properties = @{'apiKey'=$apiKey;'name'=$TeamName}
+  $RequestParams = New-Object -TypeName psobject -Property $Properties
+  $JSONbody = ConvertTo-Json -InputObject $RequestParams
+	Write-Debug $JSONbody
+
+  $output +=  Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+			
+				
+  
+}
+
+
+
+
