@@ -51,6 +51,7 @@ function Test-Email ([string]$Email)
 
 Function Add-OGUser
 {
+[CmdletBinding()]
 
 <#
   .Synopsis
@@ -79,7 +80,7 @@ Function Add-OGUser
   .Notes
     NAME:  Add-OGUser
     AUTHOR: Patrick Forristal
-    LASTEDIT: 12/4/2015
+    LASTEDIT: 12/29/2015
     KEYWORDS: OpsGenie
  #Requires -Version 3.0
  #>
@@ -93,6 +94,8 @@ Function Add-OGUser
         [ValidateLength(2,512)][string] $TimeZone,
         [ValidateLength(2,512)][string] $Locale
         )
+				
+		$UserName = $UserName.tolower()		
 
     $Properties = @{'apiKey'=$apiKey;'username'=$UserName;'fullname'=$fullname;'role'=$role}
     if ($timezone.Length -gt 0) {$Properties += @{'timezone'=$timezone}}
@@ -101,12 +104,14 @@ Function Add-OGUser
     $RequestParams = New-Object -TypeName psobject -Property $Properties
     $JSONbody = ConvertTo-Json -InputObject $RequestParams
     Write-Verbose "Sending request to OpsGenie to create new user, $UserName"
-    Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+    $output = Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+		Write-Debug $output
 }
 
 
 Function Get-OGUser
 {
+[CmdletBinding()]
 
 <#
   .Synopsis
@@ -131,7 +136,7 @@ Function Get-OGUser
   .Notes
     NAME:  Get-OGUser
     AUTHOR: Patrick Forristal
-    LASTEDIT: 12/4/2015
+    LASTEDIT: 12/29/2015
     KEYWORDS: OpsGenie
  #Requires -Version 3.0
  #>
@@ -142,6 +147,10 @@ Function Get-OGUser
         [ValidateScript({Test-Email ($_)})][string[]] $UserName,
         [ValidateScript({Test-Guid ($_)})][string[]] $id
         )
+
+		if ($Username) {
+			$UserName = $UserName.tolower()	
+		}
 
     if (($id.Length -gt 0 -and $UserName.Length -gt 0)) {
         Write-Error "You must specify either username(s) or id(s)."
@@ -168,12 +177,13 @@ Function Get-OGUser
         }
         
     }
-    return $output
+   return $output
 }
 
 
 Function Set-OGUser
 {
+[CmdletBinding()]
 <#
   .Synopsis
     Updates a user or users in OpsGenie
@@ -203,7 +213,7 @@ Function Set-OGUser
   .Notes
     NAME:  Set-OGUser
     AUTHOR: Patrick Forristal
-    LASTEDIT: 12/4/2015
+    LASTEDIT: 12/29/2015
     KEYWORDS: OpsGenie
  #Requires -Version 3.0
  #>
@@ -217,6 +227,10 @@ Function Set-OGUser
         [ValidateLength(2,512)][string] $Locale,
         [ValidateLength(1,512)][string] $Role
         )
+				
+		if ($Username) {
+			$UserName = $UserName.tolower()	
+		}	
 
     if (($id.Length -gt 0 -and $UserName.Length -gt 0) -or ($UserName.Length -eq 0 -and $id.Length -eq 0)) {
         Write-Error "You must specify either a username or id."
@@ -244,15 +258,17 @@ Function Set-OGUser
 
             Write-Verbose "Sending request to OpsGenie to modify user, $UserName"
             $output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+						Write-debug -Message ($output | select -Last 1)
 
     }
+		
 
 }
 
 
 Function Remove-OGUser
 {
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact="High")]
 
 <#
   .Synopsis
@@ -275,9 +291,9 @@ Function Remove-OGUser
   .Parameter id
     The id(s) for the user(s) to be removed.  Must be a valid GUID.
   .Notes
-    NAME:  Get-OGUser
+    NAME:  Remove-OGUser
     AUTHOR: Patrick Forristal
-    LASTEDIT: 12/4/2015
+    LASTEDIT: 12/29/2015
     KEYWORDS: OpsGenie
  #Requires -Version 3.0
  #>
@@ -286,26 +302,18 @@ Function Remove-OGUser
         [Parameter(Mandatory)][ValidateScript({Test-Guid ($_)})][string] $apiKey,
         [string] $apiURI = 'https://api.opsgenie.com/v1/json/user',
         [ValidateScript({Test-Email ($_)})][string[]] $UserName,
-        [ValidateScript({Test-Guid ($_)})][string[]] $id,
-        [switch] $Force
+        [ValidateScript({Test-Guid ($_)})][string[]] $id
         )
+		
+		if ($Username) {
+			$UserName = $UserName.tolower()	
+		}
 
     if (($id.Length -gt 0 -and $UserName.Length -gt 0) -or ($UserName.Length -eq 0 -and $id.Length -eq 0)) {
         Write-Error "You must specify either username(s) or id(s)."
     }
 
-    if (!$Force) {
-      $PromptTitle = "Remove user(s)"
-      $PromptMessage = "Do you really want to delete the specified user(s)?"
-      $PromptYes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Deletes the specified user(s)."
-      $PromptNo = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Cancels the delete operation."
-      $PromptOptions = [System.Management.Automation.Host.ChoiceDescription[]]($PromptYes,$PromptNo)
-      $PromptResponse = $host.ui.PromptForChoice($PromptTitle,$PromptMessage,$PromptOptions,1)
-      if ($PromptResponse -ne 0) {
-        Write-Verbose "Remove-OGUser cancelled by user."
-        return
-      }
-    }
+
 
     if ($UserName.Count -gt 0) {
         foreach ($user in $UserName) {
@@ -321,21 +329,20 @@ Function Remove-OGUser
     foreach ($UserId in $ID) {
             $user = get-OGUser -apiKey $apiKey -id $UserId
             if ($user.id.length -gt 0){
-
-                $Properties = @{'apiKey'=$apiKey;'id'=$UserId}
-
-                $RequestParams = New-Object -TypeName psobject -Property $Properties
-                $JSONbody = ConvertTo-Json -InputObject $RequestParams
-								Write-Debug $JSONbody
+								$apiURI2 = $apiURI + "?apiKey=$apiKey&id=$UserId"
+								Write-Debug $apiURI2
 
                 Write-Verbose "Sending request to OpsGenie to delete user, $($User.username)"
-                $output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+								if ($PSCmdlet.ShouldProcess("OpsGenie","Remove User $($User.username)")) {
+                	  	$output += @(Invoke-RestMethod -Method Delete -Uri $apiURI2 )
+											Write-debug -Message ($output | select -Last 1)
+								}
             } else {
              Write-Error "$id is not a valid user id."
             }
     }
-        return $output
-    
+        
+				
 }
 
 
@@ -380,6 +387,7 @@ Function Copy-OGNotificationRules
         [string[]] $ruleTypes = @("New Alert")
 
     )
+
 
     $Properties = @{'apiKey'=$apiKey;'fromUser'=$fromUser;'toUsers'=$toUsers;'ruleTypes'=$ruleTypes}
 
@@ -555,7 +563,8 @@ Function Set-OGTeam
 		Write-Debug $JSONbody
 
     
-		$output += Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+		$output = Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+		Write-debug $output
 
 }
 
@@ -610,12 +619,13 @@ Function Remove-OGTeam
         $output = @()
 
             $apiURI2 = $apiURI + "?apiKey=$apiKey&name=$TeamName"
-            Write-Verbose "Sending request to OpsGenie to get the user, $Team"
+            Write-Verbose "Sending request to OpsGenie to get the team, $Team"
 						Write-Debug $apiURI2
 						if ($PSCmdlet.ShouldProcess("$($TeamName) from OpsGenie ","Remove Team")) {
-            	$output += Invoke-RestMethod -Method Delete -Uri $apiURI2 
+            	$output = Invoke-RestMethod -Method Delete -Uri $apiURI2 
 						}
     }
+		Write-debug $output
 }
 
 
@@ -638,7 +648,7 @@ Function Add-OGTeam
   .Notes
     NAME:  Add-OGTeam
     AUTHOR: Josh Falls
-    LASTEDIT: 12/22/2015
+    LASTEDIT: 12/29/2015
     KEYWORDS: OpsGenie
  #Requires -Version 3.0
  #>
@@ -656,12 +666,8 @@ Function Add-OGTeam
   $JSONbody = ConvertTo-Json -InputObject $RequestParams
 	Write-Debug $JSONbody
 
-  $output +=  Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
+  $output =  Invoke-RestMethod -Method Post -Uri $apiURI -Body $JSONbody
 			
-				
+	Write-debug $output			
   
 }
-
-
-
-
